@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gila Trail Work Dashboard</title>
+    
+    <script src="https://unpkg.com/maplibre-gl/dist/maplibre-gl.js"></script>
+    <link href="https://unpkg.com/maplibre-gl/dist/maplibre-gl.css" rel="stylesheet" />
+    
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div id="main-container">
+    <div id="sidebar">
+        <h1 class="map-title">Gila Trail Dashboard</h1>
+        
+        <section class="sidebar-section">
+            <h3 class="subheading">Legend</h3>
+            <div id="legend-container">
+                </div>
+            
+            <div class="control-group">
+                <label for="style-select">Style Points By:</label>
+                <select id="style-select" onchange="updateMapStyle(this.value)">
+                    <option value="org_type">Organization Type</option>
+                    <option value="crew_type">Crew Type</option>
+                    <option value="work_type">Work Type</option>
+                    <option value="status">Work Status</option>
+                </select>
+            </div>
+        </section>
+
+        <hr class="divider">
+
+        <section class="sidebar-section">
+            <h3 class="subheading">Filters</h3>
+            
+            <div class="quick-filter">
+                <input type="checkbox" id="in-field-check" onchange="applyFilters()">
+                <label for="in-field-check">Currently In Field</label>
+            </div>
+
+            <div class="filter-group">
+                <label>Work Type</label>
+                <div class="bulk-actions">
+                    <button onclick="toggleAllWorkTypes(true)">All</button>
+                    <button onclick="toggleAllWorkTypes(false)">None</button>
+                </div>
+                <div id="work-type-checkboxes">
+                    </div>
+            </div>
+        </section>
+
+        <hr class="divider">
+
+        <section class="sidebar-section">
+            <h3 class="subheading">Advanced Filters</h3>
+            <div id="builder-container"></div>
+            <button class="add-filter-btn" onclick="addFilterRow()">+ Add Filter Row</button>
+        </section>
+    </div>
+
+    <div id="map"></div>
+</div>
+
+<script src="map-logic.js"></script>
+</body>
+</html>

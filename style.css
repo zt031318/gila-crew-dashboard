@@ -1,0 +1,114 @@
+:root {
+    --bg-dark: #121212;
+    --panel-dark: #1e1e1e;
+    --accent: #1abc9c;
+    --text-main: #e0e0e0;
+    --text-dim: #999;
+    --border: #333;
+}
+
+body { 
+    margin: 0; 
+    padding: 0; 
+    font-family: 'Inter', sans-serif; 
+    background-color: var(--bg-dark);
+    color: var(--text-main);
+}
+
+#main-container {
+    display: flex;
+    height: 100vh;
+    width: 100vw;
+}
+
+#sidebar {
+    width: 320px;
+    background: var(--panel-dark);
+    border-right: 1px solid var(--border);
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    overflow-y: auto;
+    z-index: 10;
+}
+
+#map { flex-grow: 1; }
+
+.map-title { font-size: 1.25rem; font-weight: 700; margin: 0; color: var(--accent); }
+.subheading { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-dim); margin-bottom: 12px; }
+
+.sidebar-section { display: flex; flex-direction: column; gap: 12px; }
+
+.divider { border: 0; border-top: 1px solid var(--border); width: 100%; margin: 5px 0; }
+
+/* Form Elements */
+select, button, input {
+    background: #2a2a2a;
+    color: white;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px;
+    font-size: 0.9rem;
+    transition: 0.2s;
+}
+
+button:hover { background: #3a3a3a; cursor: pointer; border-color: var(--accent); }
+
+.bulk-actions { display: flex; gap: 8px; margin-bottom: 8px; }
+.bulk-actions button { flex: 1; padding: 4px; font-size: 0.75rem; }
+
+/* Legend UI */
+#legend-container { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+.legend-item { display: flex; align-items: center; gap: 12px; font-size: 0.85rem; }
+.legend-color { width: 10px; height: 10px; border-radius: 50%; }
+
+/* Advanced Builder Rows */
+.filter-row { display: flex; gap: 5px; margin-bottom: 10px; }
+.filter-row select, .filter-row input { flex: 1; font-size: 0.7rem; padding: 5px; }
+
+.maplibregl-popup {
+    max-width: 300px !important; /* Forces the width */
+}
+
+.maplibregl-popup-content {
+    background: #252525 !important;
+    color: #e0e0e0;
+    border: 1px solid #444;
+    border-radius: 8px;
+    padding: 12px;
+    font-size: 0.85rem;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+}
+
+.maplibregl-popup-tip {
+    border-top-color: #252525 !important;
+}
+
+.hover-popup b {
+    color: #999;
+    font-weight: 400;
+}
+
+/* Layout for the header section of the popup */
+.popup-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 5px;
+}
+
+/* Constrain the logo size */
+.popup-logo {
+    width: 50px;
+    height: 50px;
+    object-fit: contain; /* Keeps the logo's proportions */
+    border-radius: 4px;
+    background: #333; /* Slight background in case the logo is transparent */
+}
+
+.popup-divider {
+    border: 0;
+    border-top: 1px solid #444;
+    margin: 5px 0;
+}
