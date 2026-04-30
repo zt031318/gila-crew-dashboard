@@ -1,6 +1,8 @@
-let masterGeoJSON = null; // This is global to this file
+let masterGeoJSON = null; 
+let currentFilteredData = [];
+let viewDate = new Date(2026, 4, 1); // May 2026
+let currentStyleProperty = 'org_type'; // Default starting style
 
-// 1. STYLE CONFIGURATIONS
 const styleConfigs = {
     org_type: { 'Government': '#ff4444', 'Non-profit': '#44ff44', 'For-Profit': '#4444ff', 'Other': '#888' },
     crew_type: { 'Professional': '#e67e22', 'Volunteer': '#f1c40f', 'Corps': '#9b59b6', 'Other': '#95a5a6' },
@@ -8,12 +10,16 @@ const styleConfigs = {
     status: { 'Planned': '#3498db', 'Complete': '#2ecc71', 'Canceled': '#e74c3c', 'Postponed': '#f1c40f', 'Other': '#95a5a6'}
 };
 
-const bounds = [
-  [-109.11, 32.32], // Southwest coordinates (lng, lat)
-  [-107.28, 34.59]  // Northeast coordinates (lng, lat)
-];
+const fieldTypes = {
+    org_name: 'text',
+    crew_name: 'text',
+    work_type: 'text',
+    status: 'text',
+    crew_size: 'number',
+    start_date: 'date',
+    end_date: 'date'
+};
 
-// 2. INITIALIZE MAP
 const map = new maplibregl.Map({
     container: 'map',
     style: {
@@ -28,27 +34,24 @@ const map = new maplibregl.Map({
         "layers": [{"id": "topo-layer", "type": "raster", "source": "topo"}]
     },
     center: [-108.27, 32.77],
-    zoom: 10,
-    maxBounds: bounds // Constrains the map to these coordinates
+    zoom: 10
 });
 
 map.on('load', () => {
-    // 1. Setup the empty source first
     map.addSource('crew-data-source', {
         'type': 'geojson',
-        'data': { "type": "FeatureCollection", "features": [] }, // Start empty
+        'data': { "type": "FeatureCollection", "features": [] },
+        'promoteId': 'fid',
         'cluster': true,
         'clusterMaxZoom': 14,
         'clusterRadius': 50
     });
 
-
-    // 1. The Cluster Circles
     map.addLayer({
         id: 'clusters',
         type: 'circle',
         source: 'crew-data-source',
-        filter: ['all',['has', 'point_count']],
+        filter: ['has', 'point_count'],
         paint: {
             'circle-color': '#1abc9c',
             'circle-radius': ['step', ['get', 'point_count'], 20, 10, 30, 30, 40],
@@ -58,26 +61,20 @@ map.on('load', () => {
         }
     });
 
-    // 2. The Cluster Count Text
     map.addLayer({
         id: 'cluster-count',
         type: 'symbol',
         source: 'crew-data-source',
-        filter: ['all',['has', 'point_count']],
-        layout: {
-            'text-field': '{point_count}',
-            'text-font': ['Open Sans Regular', 'Arial Unicode MS Regular'],
-            'text-size': 12
-        },
+        filter: ['has', 'point_count'],
+        layout: { 'text-field': '{point_count}', 'text-size': 12 },
         paint: { "text-color": "#ffffff" }
     });
 
-    // 3. The Individual Points (Unclustered)
     map.addLayer({
-        'id': 'unclustered-point',
-        'type': 'circle',
-        'source': 'crew-data-source',
-        'filter': ['all',['!', ['has', 'point_count']]],
+        id: 'unclustered-point',
+        type: 'circle',
+        source: 'crew-data-source',
+        filter: ['!', ['has', 'point_count']],
         paint: {
             'circle-radius': 8,
             'circle-stroke-width': 2,
@@ -85,51 +82,17 @@ map.on('load', () => {
         }
     });
 
-    // Initial styling setup
     updateMapStyle('org_type');
-
-    console.log("Unclustered Filter: ", map.getFilter('unclustered-point'))
-    console.log("Clustered Filter: ", map.getFilter('clusters'))
 
     fetch('./crew_data.geojson')
         .then(res => res.json())
         .then(data => {
-            masterGeoJSON = data; // Save the "Master" copy for later filtering
-            
-            // Push the initial data to the map
-            map.getSource('crew-data-source').setData(masterGeoJSON);
-            
-            // Now that data exists, generate your UI
+            masterGeoJSON = data;
             generateWorkTypeCheckboxes();
-        })
-        .catch(err => console.error("Error loading GeoJSON:", err));
-
-
+            applyFilters(); // This will also trigger the initial calendar render
+        });
 });
 
-// 3. LEGEND & STYLING LOGIC
-function updateMapStyle(property) {
-    const config = styleConfigs[property];
-    if (!config) return;
-
-    // Update Map
-    map.setPaintProperty('unclustered-point', 'circle-color', [
-        'match', ['get', property],
-        ...Object.entries(config).flat(),
-        '#cccccc'
-    ]);
-
-    // Update Legend
-    const container = document.getElementById('legend-container');
-    container.innerHTML = Object.entries(config).map(([label, color]) => `
-        <div class="legend-item">
-            <div class="legend-color" style="background:${color}"></div>
-            <span>${label}</span>
-        </div>
-    `).join('');
-}
-
-// 4. FILTER ENGINE
 function applyFilters() {
     if (!masterGeoJSON) return;
 
@@ -137,7 +100,6 @@ function applyFilters() {
     let filteredFeatures = [];
 
     if (mode === 'quick') {
-        // --- QUICK LOGIC ---
         const today = new Date().toISOString().split('T')[0];
         const inFieldChecked = document.getElementById('in-field-check').checked;
         const activeWorkTypes = Array.from(document.querySelectorAll('.work-type-cb:checked')).map(cb => cb.value);
@@ -148,163 +110,133 @@ function applyFilters() {
             const matchesDate = inFieldChecked ? (props.start_date <= today && props.end_date >= today) : true;
             return matchesWorkType && matchesDate;
         });
-
     } else {
-        // --- ADVANCED LOGIC ---
-        // 1. Capture the actual DOM elements (the rows)
         const filterRows = Array.from(document.querySelectorAll('.filter-row'));
-
         filteredFeatures = masterGeoJSON.features.filter(f => {
             const props = f.properties;
-
-            // 2. Use .every() on the DOM elements directly
             return filterRows.every(row => {
                 const field = row.querySelector('.field-select').value;
                 const op = row.querySelector('.operator-select').value;
                 const val = row.querySelector('.filter-value').value;
-                
-                if (!val) return true; // Don't filter if the input is empty
+                if (!val) return true;
 
                 const recordVal = props[field];
                 const type = fieldTypes[field];
 
-                // Numerical Logic
                 if (type === 'number') {
-                    const numRecord = parseInt(recordVal);
-                    const numInput = parseInt(val);
-                    if (isNaN(numInput)) return true; // Safety check
-                    if (op === '==') return numRecord === numInput;
-                    if (op === '>') return numRecord > numInput;
-                    if (op === '<') return numRecord < numInput;
-                    if (op === '>=') return numRecord >= numInput;
-                    if (op === '<=') return numRecord <= numInput;
+                    const nR = parseInt(recordVal), nI = parseInt(val);
+                    if (op === '==') return nR === nI;
+                    if (op === '>') return nR > nI;
+                    if (op === '<') return nR < nI;
                 } 
-                
-                // Date Logic
                 if (type === 'date') {
-                    const dateRecord = new Date(recordVal);
-                    const dateInput = new Date(val);
                     if (op === '==') return recordVal === val;
-                    if (op === '>') return dateRecord > dateInput;
-                    if (op === '<') return dateRecord < dateInput;
+                    const dR = new Date(recordVal), dI = new Date(val);
+                    return op === '>' ? dR > dI : dR < dI;
                 }
-
-                // Text Logic
                 if (type === 'text') {
-                    const textRecord = String(recordVal || "").toLowerCase();
-                    const textInput = val.toLowerCase();
-                    if (op === 'includes') return textRecord.includes(textInput);
-                    if (op === '==') return textRecord === textInput;
+                    const tR = String(recordVal || "").toLowerCase(), tI = val.toLowerCase();
+                    return op === 'includes' ? tR.includes(tI) : tR === tI;
                 }
-
                 return true;
             });
         });
     }
 
-    map.getSource('crew-data-source').setData({
-        type: 'FeatureCollection',
-        features: filteredFeatures
+    currentFilteredData = filteredFeatures;
+    map.getSource('crew-data-source').setData({ type: 'FeatureCollection', features: filteredFeatures });
+    renderCalendar();
+}
+
+function renderCalendar() {
+    const grid = document.getElementById('calendar-grid');
+    const display = document.getElementById('current-month-display');
+    if (!grid || !display) return;
+    
+    grid.innerHTML = '';
+    const year = viewDate.getFullYear();
+    const month = viewDate.getMonth();
+    display.innerText = viewDate.toLocaleString('default', { month: 'long', year: 'numeric' });
+
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    for (let i = 1; i <= daysInMonth; i++) {
+        const dayDiv = document.createElement('div');
+        dayDiv.className = 'calendar-day';
+        dayDiv.innerHTML = `<span>${i}</span>`;
+        const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
+        
+        currentFilteredData.filter(f => dateStr >= f.properties.start_date && dateStr <= f.properties.end_date).forEach(f => {
+            const event = document.createElement('div');
+            event.className = 'crew-event';
+            event.innerText = f.properties.crew_name || f.properties.org_name || "unknown Crew or Org";
+
+            // 1. Add the data attribute so highlightOnMap can find it
+            const featureId = f.properties.fid;
+            event.setAttribute('data-fid', featureId);
+            
+            const propertyValue = f.properties[currentStyleProperty];
+            const categoryConfig = styleConfigs[currentStyleProperty];
+            event.style.backgroundColor = categoryConfig[propertyValue] || '#888';
+
+            
+            event.onmouseenter = () => highlightOnMap(featureId, true);
+            event.onmouseleave = () => highlightOnMap('', false);
+            dayDiv.appendChild(event);
+        });
+        grid.appendChild(dayDiv);
+    }
+}
+
+function highlightOnMap(id, shouldHighlight) {
+    // 1. Highlight the map point using the promoted 'fid'
+    // We use ['id'] because promoteId: 'fid' was used in the source
+    map.setPaintProperty('unclustered-point', 'circle-stroke-width', [
+        'case',
+        ['==', ['id'], id || -1], 6, 
+        2
+    ]);
+
+    // 2. Highlight the calendar entries
+    // We look for the data-fid attribute we will add in the render function
+    document.querySelectorAll('.crew-event').forEach(el => {
+        const eventId = parseInt(el.getAttribute('data-fid'));
+        if (shouldHighlight && eventId === id) {
+            el.classList.add('highlight');
+        } else {
+            el.classList.remove('highlight');
+        }
     });
 }
 
-// 5. UI HELPERS
-function generateWorkTypeCheckboxes() {
-    const container = document.getElementById('work-type-checkboxes');
-    const types = ['Trail', 'Wildlife', 'Habitat', 'Other'];
-    container.innerHTML = types.map(t => `
-        <div class="quick-filter">
-            <input type="checkbox" class="work-type-cb" value="${t}" checked onchange="applyFilters()">
-            <label>${t}</label>
-        </div>
-    `).join('');
+function setView(mode) {
+    const area = document.getElementById('content-area');
+    const calendar = document.getElementById('calendar-container');
+    area.className = `view-${mode}`;
+    calendar.style.display = (mode === 'map') ? 'none' : 'flex';
+    setTimeout(() => map.resize(), 300);
 }
 
-function toggleAllWorkTypes(checked) {
-    document.querySelectorAll('.work-type-cb').forEach(cb => cb.checked = checked);
-    applyFilters();
+function changeMonth(step) {
+    viewDate.setMonth(viewDate.getMonth() + step);
+    renderCalendar();
 }
 
-
-const fieldTypes = {
-    org_name: 'text',
-    crew_name: 'text',
-    work_type: 'text',
-    status: 'text',
-    crew_size: 'number',
-    start_date: 'date',
-    end_date: 'date'
-};
-
-function addFilterRow() {
-    const container = document.getElementById('builder-container');
-    const row = document.createElement('div');
-    row.className = 'filter-row';
-    
-    // Initial HTML with the Field Select
-    row.innerHTML = `
-        <select class="field-select" onchange="updateOperatorOptions(this)">
-            ${Object.keys(fieldTypes).map(f => `<option value="${f}">${f.replace('_', ' ')}</option>`).join('')}
-        </select>
-        <span class="operator-container">
-            <!-- Operators will be injected here -->
-        </span>
-        <input type="text" class="filter-value" placeholder="Value" oninput="applyFilters()">
-        <button onclick="this.parentElement.remove(); applyFilters();">×</button>
-    `;
-    container.appendChild(row);
-    
-    // Trigger the initial operator load for the first field in the list
-    updateOperatorOptions(row.querySelector('.field-select'));
+function toggleSidebar() {
+    const container = document.getElementById('main-container');
+    const btn = document.getElementById('toggle-btn');
+    container.classList.toggle('collapsed');
+    btn.innerHTML = container.classList.contains('collapsed') ? '▶' : '◀';
+    setTimeout(() => map.resize(), 300); 
 }
 
-function updateOperatorOptions(selectElement) {
-    const field = selectElement.value;
-    const type = fieldTypes[field];
-    const row = selectElement.parentElement;
-    const container = row.querySelector('.operator-container');
-    const valueInput = row.querySelector('.filter-value'); // Target the input
-    
-    // 1. Set the Input Type
-    if (type === 'date') {
-        valueInput.type = 'date';
-    } else if (type === 'number') {
-        valueInput.type = 'number'; // Bonus: provides up/down arrows for crew size
-    } else {
-        valueInput.type = 'text';
-    }
+// Ensure popups still work
+const popup = new maplibregl.Popup({ closeButton: false, closeOnClick: false });
 
-    // 2. Set the Operators (Same as before)
-    let options = [];
-    if (type === 'number') {
-        options = [['=', '=='], ['>', '>'], ['<', '<'], ['>=', '>='], ['<=', '<=']];
-    } else if (type === 'date') {
-        options = [['on', '=='], ['before', '<'], ['after', '>']];
-    } else {
-        options = [['is exactly', '=='], ['contains', 'includes']];
-    }
-
-    container.innerHTML = `
-        <select class="operator-select" onchange="applyFilters()">
-            ${options.map(opt => `<option value="${opt[1]}">${opt[0]}</option>`).join('')}
-        </select>
-    `;
-    applyFilters();
-}
-
-//Popup Logic
-// Initialize a single popup instance
-const popup = new maplibregl.Popup({
-    closeButton: false,
-    closeOnClick: false
-});
-
-// Listen for mouse movement over the unclustered points
 map.on('mousemove', 'unclustered-point', (e) => {
     map.getCanvas().style.cursor = 'pointer';
-
-    const coordinates = e.features[0].geometry.coordinates.slice();
     const props = e.features[0].properties;
+    const featureId = e.features[0].id;
+    highlightOnMap(featureId, true);
 
     // Check if a logo exists, otherwise use a transparent spacer or a generic icon
     const logoHtml = props.crew_logo 
@@ -326,70 +258,88 @@ map.on('mousemove', 'unclustered-point', (e) => {
             <b>Work Description:</b> ${props.work_description}
         </div>
     `;
-    // Handle map wrap-around
-    while (Math.abs(e.lngLat.lng - coordinates[0]) > 180) {
-        coordinates[0] += e.lngLat.lng > coordinates[0] ? 360 : -360;
-    }
 
-    popup.setLngLat(coordinates).setHTML(content).addTo(map);
+    
+
+    popup.setLngLat(e.features[0].geometry.coordinates)
+        .setHTML(content)
+        .addTo(map);
 });
 
-// Remove popup when mouse leaves
 map.on('mouseleave', 'unclustered-point', () => {
     map.getCanvas().style.cursor = '';
+    highlightOnMap('', false);
     popup.remove();
 });
 
-// OPTIONAL: Zoom in when clicking a cluster
-map.on('click', 'clusters', (e) => {
-    const features = map.queryRenderedFeatures(e.point, { layers: ['clusters'] });
-    const clusterId = features[0].properties.cluster_id;
-    map.getSource('crew-data-source').getClusterExpansionZoom(clusterId, (err, zoom) => {
-        if (err) return;
-        map.easeTo({
-            center: features[0].geometry.coordinates,
-            zoom: zoom
-        });
-    });
-});
+// Helper for UI generation
+function generateWorkTypeCheckboxes() {
+    const container = document.getElementById('work-type-checkboxes');
+    const types = ['Trail', 'Wildlife', 'Habitat', 'Other'];
+    container.innerHTML = types.map(t => `
+        <div class="quick-filter">
+            <input type="checkbox" class="work-type-cb" value="${t}" checked onchange="applyFilters()">
+            <label>${t}</label>
+        </div>
+    `).join('');
+}
+
+function updateMapStyle(prop) {
+    currentStyleProperty = prop; // Update the global tracker
+    const config = styleConfigs[prop];
+
+    // Update Map
+    map.setPaintProperty('unclustered-point', 'circle-color', [
+        'match', 
+        ['get', prop], 
+        ...Object.entries(config).flat(), 
+        '#ccc'
+    ]);
+
+    // Update Legend
+    document.getElementById('legend-container').innerHTML = Object.entries(config).map(([label, color]) => `
+        <div class="legend-item">
+            <div class="legend-color" style="background:${color}"></div>
+            <span>${label}</span>
+        </div>
+    `).join('');
+
+    // Update Calendar (Redraw to apply new colors)
+    renderCalendar();
+}
 
 function switchFilterMode(mode) {
-    const quickUI = document.getElementById('quick-filter-ui');
-    const advancedUI = document.getElementById('advanced-filter-ui');
-
-    if (mode === 'quick') {
-        quickUI.style.display = 'block';
-        advancedUI.style.display = 'none';
-        // Optional: Clear advanced rows when switching back to keep it "clean"
-        document.getElementById('builder-container').innerHTML = '';
-    } else {
-        quickUI.style.display = 'none';
-        advancedUI.style.display = 'block';
-        // Reset quick filters to "All" so they don't restrict the advanced mode
-        toggleAllWorkTypes(true);
-        document.getElementById('in-field-check').checked = false;
-    }
-    
-    // Re-run the filter so the map updates immediately to the "clean" state of the new mode
+    document.getElementById('quick-filter-ui').style.display = mode === 'quick' ? 'block' : 'none';
+    document.getElementById('advanced-filter-ui').style.display = mode === 'advanced' ? 'block' : 'none';
     applyFilters();
 }
 
-function toggleSidebar() {
-    const container = document.getElementById('main-container');
-    const btn = document.getElementById('toggle-btn');
+function addFilterRow() {
+    const container = document.getElementById('builder-container');
+    const row = document.createElement('div');
+    row.className = 'filter-row';
+    row.innerHTML = `
+        <select class="field-select" onchange="updateOperatorOptions(this)">
+            ${Object.keys(fieldTypes).map(f => `<option value="${f}">${f.replace('_', ' ')}</option>`).join('')}
+        </select>
+        <span class="operator-container"></span>
+        <input type="text" class="filter-value" placeholder="Value" oninput="applyFilters()">
+        <button onclick="this.parentElement.remove(); applyFilters();">×</button>`;
+    container.appendChild(row);
+    updateOperatorOptions(row.querySelector('.field-select'));
+}
+
+function updateOperatorOptions(sel) {
+    const type = fieldTypes[sel.value];
+    const row = sel.parentElement;
+    const ops = type === 'number' ? [['=', '=='], ['>', '>'], ['<', '<']] : 
+                type === 'date' ? [['on', '=='], ['before', '<'], ['after', '>']] : 
+                [['is', '=='], ['contains', 'includes']];
     
-    container.classList.toggle('collapsed');
-    
-    // Update the button icon based on state
-    if (container.classList.contains('collapsed')) {
-        btn.innerHTML = '▶'; // Point right when closed
-    } else {
-        btn.innerHTML = '◀'; // Point left when open
-    }
-    
-    // CRITICAL: Tell the map the container size has changed
-    // We wrap it in a small timeout to wait for the CSS transition to finish
-    setTimeout(() => {
-        map.resize();
-    }, 300); 
+    row.querySelector('.operator-container').innerHTML = `
+        <select class="operator-select" onchange="applyFilters()">
+            ${ops.map(o => `<option value="${o[1]}">${o[0]}</option>`).join('')}
+        </select>`;
+    row.querySelector('.filter-value').type = type === 'date' ? 'date' : type === 'number' ? 'number' : 'text';
+    applyFilters();
 }

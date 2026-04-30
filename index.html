@@ -13,15 +13,27 @@
 <body>
 
 <div id="main-container">
+    <button id="toggle-btn" onclick="toggleSidebar()">◀</button>
     <div id="sidebar">
         <div class="sidebar-header">
-            <h2>Gila Field Crews Dashboard</h2>
-            <button id="toggle-btn" onclick="toggleSidebar()">◀</button>
+            <h2>Gila Field Crews</h2>
         </div>
+
+        <section class="sidebar-section">
+            <h3 class="subheading">View Mode</h3>
+            <div class="view-toggle">
+                <!-- Pass strings to setView -->
+                <button onclick="setView('map')">Map</button>
+                <button onclick="setView('calendar')">Calendar</button>
+                <button onclick="setView('both')">Split</button>
+            </div>
+        </section>
+
+        <hr class="divider">
+
         <section class="sidebar-section">
             <h3 class="subheading">Legend</h3>
-            <div id="legend-container">
-                </div>
+            <div id="legend-container"></div>
             
             <div class="control-group">
                 <label for="style-select">Style Points By:</label>
@@ -36,7 +48,6 @@
 
         <hr class="divider">
 
-
         <section class="sidebar-section">
             <h3 class="subheading">Filter Mode</h3>
             <div class="mode-toggle">
@@ -48,11 +59,9 @@
             </div>
         </section>
 
-        <!-- Wrap your existing sections in divs so we can hide/show them -->
         <div id="quick-filter-ui">
             <section class="sidebar-section">
-                <h3 class="subheading">Filters</h3>
-                
+                <h3 class="subheading">Quick Filters</h3>
                 <div class="quick-filter">
                     <input type="checkbox" id="in-field-check" onchange="applyFilters()">
                     <label for="in-field-check">Currently In Field</label>
@@ -64,8 +73,7 @@
                         <button onclick="toggleAllWorkTypes(true)">All</button>
                         <button onclick="toggleAllWorkTypes(false)">None</button>
                     </div>
-                    <div id="work-type-checkboxes">
-                        </div>
+                    <div id="work-type-checkboxes"></div>
                 </div>
             </section>
         </div>
@@ -79,9 +87,20 @@
         </div>
     </div>
 
-    
-    <div id="map"></div>
-
+    <!-- The class here controls the Grid layout via your CSS -->
+    <div id="content-area" class="view-map"> 
+        <div id="map"></div>
+        
+        <!-- Calendar starts hidden, but setView('calendar') or setView('both') will show it -->
+        <div id="calendar-container" style="display: none;">
+            <div id="calendar-header">
+                <button onclick="changeMonth(-1)">◀</button>
+                <h2 id="current-month-display">May 2026</h2>
+                <button onclick="changeMonth(1)">▶</button>
+            </div>
+            <div id="calendar-grid"></div>
+        </div>
+    </div>
 </div>
 
 <script src="map-logic.js"></script>
