@@ -4,7 +4,7 @@ let viewDate = new Date(2026, 4, 1); // May 2026
 let currentStyleProperty = 'org_type'; // Default starting style
 
 const styleConfigs = {
-    org_type: { 'Government': '#ff4444', 'Non-profit': '#44ff44', 'For-Profit': '#4444ff', 'Other': '#888' },
+    org_type: { 'Government': '#ff4444', 'Non-Profit': '#44ff44', 'For-Profit': '#4444ff', 'Other': '#888' },
     crew_type: { 'Professional': '#e67e22', 'Volunteer': '#f1c40f', 'Corps': '#9b59b6', 'Other': '#95a5a6' },
     work_type: { 'Trail': '#2ecc71', 'Wildlife': '#e74c3c', 'Habitat': '#3498db', 'Other': '#7f8c8d' },
     status: { 'Planned': '#3498db', 'Complete': '#2ecc71', 'Canceled': '#e74c3c', 'Postponed': '#f1c40f', 'Other': '#95a5a6'}
@@ -33,8 +33,12 @@ const map = new maplibregl.Map({
         },
         "layers": [{"id": "topo-layer", "type": "raster", "source": "topo"}]
     },
-    center: [-108.27, 32.77],
-    zoom: 10
+    center: [-107.29, 33.187],
+    zoom: 8,
+    maxBounds: [
+        [-110.16, 32.25],
+        [-105.69, 34.93]
+    ]
 });
 
 map.on('load', () => {
@@ -44,7 +48,7 @@ map.on('load', () => {
         'promoteId': 'fid',
         'cluster': true,
         'clusterMaxZoom': 14,
-        'clusterRadius': 50
+        'clusterRadius': 10
     });
 
     map.addLayer({
@@ -102,13 +106,15 @@ function applyFilters() {
     if (mode === 'quick') {
         const today = new Date().toISOString().split('T')[0];
         const inFieldChecked = document.getElementById('in-field-check').checked;
+        const hidePastWorkChecked = document.getElementById('hide-past-work').checked;
         const activeWorkTypes = Array.from(document.querySelectorAll('.work-type-cb:checked')).map(cb => cb.value);
 
         filteredFeatures = masterGeoJSON.features.filter(f => {
             const props = f.properties;
             const matchesWorkType = activeWorkTypes.includes(props.work_type);
             const matchesDate = inFieldChecked ? (props.start_date <= today && props.end_date >= today) : true;
-            return matchesWorkType && matchesDate;
+            const isPastWork = hidePastWorkChecked ? (props.end_date < today) : false;
+            return matchesWorkType && matchesDate && !isPastWork;
         });
     } else {
         const filterRows = Array.from(document.querySelectorAll('.filter-row'));
