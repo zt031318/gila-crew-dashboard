@@ -133,29 +133,75 @@ function updateMapStyle(property) {
 function applyFilters() {
     if (!masterGeoJSON) return;
 
-    const today = new Date().toISOString().split('T')[0];
-    const inFieldChecked = document.getElementById('in-field-check').checked;
-    const activeWorkTypes = Array.from(document.querySelectorAll('.work-type-cb:checked'))
-                                 .map(cb => cb.value);
+    const mode = document.querySelector('input[name="filterMode"]:checked').value;
+    let filteredFeatures = [];
 
-    // Create a filtered copy of the features
-    const filteredFeatures = masterGeoJSON.features.filter(f => {
-        const props = f.properties;
+    if (mode === 'quick') {
+        // --- QUICK LOGIC ---
+        const today = new Date().toISOString().split('T')[0];
+        const inFieldChecked = document.getElementById('in-field-check').checked;
+        const activeWorkTypes = Array.from(document.querySelectorAll('.work-type-cb:checked')).map(cb => cb.value);
 
-        // 1. Check Work Type
-        const matchesWorkType = activeWorkTypes.includes(props.work_type);
+        filteredFeatures = masterGeoJSON.features.filter(f => {
+            const props = f.properties;
+            const matchesWorkType = activeWorkTypes.includes(props.work_type);
+            const matchesDate = inFieldChecked ? (props.start_date <= today && props.end_date >= today) : true;
+            return matchesWorkType && matchesDate;
+        });
 
-        // 2. Check Date (if box is checked)
-        let matchesDate = true;
-        if (inFieldChecked) {
-            matchesDate = (props.start_date <= today && props.end_date >= today);
-        }
+    } else {
+        // --- ADVANCED LOGIC ---
+        // 1. Capture the actual DOM elements (the rows)
+        const filterRows = Array.from(document.querySelectorAll('.filter-row'));
 
-        return matchesWorkType && matchesDate;
-    });
+        filteredFeatures = masterGeoJSON.features.filter(f => {
+            const props = f.properties;
 
-    // 3. PUSH TO MAP
-    // This forces MapLibre to re-cluster from ONLY these points
+            // 2. Use .every() on the DOM elements directly
+            return filterRows.every(row => {
+                const field = row.querySelector('.field-select').value;
+                const op = row.querySelector('.operator-select').value;
+                const val = row.querySelector('.filter-value').value;
+                
+                if (!val) return true; // Don't filter if the input is empty
+
+                const recordVal = props[field];
+                const type = fieldTypes[field];
+
+                // Numerical Logic
+                if (type === 'number') {
+                    const numRecord = parseInt(recordVal);
+                    const numInput = parseInt(val);
+                    if (isNaN(numInput)) return true; // Safety check
+                    if (op === '==') return numRecord === numInput;
+                    if (op === '>') return numRecord > numInput;
+                    if (op === '<') return numRecord < numInput;
+                    if (op === '>=') return numRecord >= numInput;
+                    if (op === '<=') return numRecord <= numInput;
+                } 
+                
+                // Date Logic
+                if (type === 'date') {
+                    const dateRecord = new Date(recordVal);
+                    const dateInput = new Date(val);
+                    if (op === '==') return recordVal === val;
+                    if (op === '>') return dateRecord > dateInput;
+                    if (op === '<') return dateRecord < dateInput;
+                }
+
+                // Text Logic
+                if (type === 'text') {
+                    const textRecord = String(recordVal || "").toLowerCase();
+                    const textInput = val.toLowerCase();
+                    if (op === 'includes') return textRecord.includes(textInput);
+                    if (op === '==') return textRecord === textInput;
+                }
+
+                return true;
+            });
+        });
+    }
+
     map.getSource('crew-data-source').setData({
         type: 'FeatureCollection',
         features: filteredFeatures
@@ -179,17 +225,71 @@ function toggleAllWorkTypes(checked) {
     applyFilters();
 }
 
+
+const fieldTypes = {
+    org_name: 'text',
+    crew_name: 'text',
+    work_type: 'text',
+    status: 'text',
+    crew_size: 'number',
+    start_date: 'date',
+    end_date: 'date'
+};
+
 function addFilterRow() {
     const container = document.getElementById('builder-container');
     const row = document.createElement('div');
     row.className = 'filter-row';
+    
+    // Initial HTML with the Field Select
     row.innerHTML = `
-        <select><option>AND</option><option>OR</option></select>
-        <select><option value="crew_size">Crew Size</option></select>
-        <input type="text" placeholder="Val" oninput="applyFilters()">
+        <select class="field-select" onchange="updateOperatorOptions(this)">
+            ${Object.keys(fieldTypes).map(f => `<option value="${f}">${f.replace('_', ' ')}</option>`).join('')}
+        </select>
+        <span class="operator-container">
+            <!-- Operators will be injected here -->
+        </span>
+        <input type="text" class="filter-value" placeholder="Value" oninput="applyFilters()">
         <button onclick="this.parentElement.remove(); applyFilters();">×</button>
     `;
     container.appendChild(row);
+    
+    // Trigger the initial operator load for the first field in the list
+    updateOperatorOptions(row.querySelector('.field-select'));
+}
+
+function updateOperatorOptions(selectElement) {
+    const field = selectElement.value;
+    const type = fieldTypes[field];
+    const row = selectElement.parentElement;
+    const container = row.querySelector('.operator-container');
+    const valueInput = row.querySelector('.filter-value'); // Target the input
+    
+    // 1. Set the Input Type
+    if (type === 'date') {
+        valueInput.type = 'date';
+    } else if (type === 'number') {
+        valueInput.type = 'number'; // Bonus: provides up/down arrows for crew size
+    } else {
+        valueInput.type = 'text';
+    }
+
+    // 2. Set the Operators (Same as before)
+    let options = [];
+    if (type === 'number') {
+        options = [['=', '=='], ['>', '>'], ['<', '<'], ['>=', '>='], ['<=', '<=']];
+    } else if (type === 'date') {
+        options = [['on', '=='], ['before', '<'], ['after', '>']];
+    } else {
+        options = [['is exactly', '=='], ['contains', 'includes']];
+    }
+
+    container.innerHTML = `
+        <select class="operator-select" onchange="applyFilters()">
+            ${options.map(opt => `<option value="${opt[1]}">${opt[0]}</option>`).join('')}
+        </select>
+    `;
+    applyFilters();
 }
 
 //Popup Logic
@@ -252,3 +352,44 @@ map.on('click', 'clusters', (e) => {
         });
     });
 });
+
+function switchFilterMode(mode) {
+    const quickUI = document.getElementById('quick-filter-ui');
+    const advancedUI = document.getElementById('advanced-filter-ui');
+
+    if (mode === 'quick') {
+        quickUI.style.display = 'block';
+        advancedUI.style.display = 'none';
+        // Optional: Clear advanced rows when switching back to keep it "clean"
+        document.getElementById('builder-container').innerHTML = '';
+    } else {
+        quickUI.style.display = 'none';
+        advancedUI.style.display = 'block';
+        // Reset quick filters to "All" so they don't restrict the advanced mode
+        toggleAllWorkTypes(true);
+        document.getElementById('in-field-check').checked = false;
+    }
+    
+    // Re-run the filter so the map updates immediately to the "clean" state of the new mode
+    applyFilters();
+}
+
+function toggleSidebar() {
+    const container = document.getElementById('main-container');
+    const btn = document.getElementById('toggle-btn');
+    
+    container.classList.toggle('collapsed');
+    
+    // Update the button icon based on state
+    if (container.classList.contains('collapsed')) {
+        btn.innerHTML = '▶'; // Point right when closed
+    } else {
+        btn.innerHTML = '◀'; // Point left when open
+    }
+    
+    // CRITICAL: Tell the map the container size has changed
+    // We wrap it in a small timeout to wait for the CSS transition to finish
+    setTimeout(() => {
+        map.resize();
+    }, 300); 
+}

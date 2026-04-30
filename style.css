@@ -17,23 +17,52 @@ body {
 
 #main-container {
     display: flex;
-    height: 100vh;
     width: 100vw;
+    height: 100vh;
+    transition: all 0.3s ease; /* Smooth sliding animation */
+}
+
+/* When collapsed, we slide the sidebar out of view using a negative margin */
+#main-container.collapsed #sidebar {
+    margin-left: -350px;
 }
 
 #sidebar {
-    width: 320px;
-    background: var(--panel-dark);
-    border-right: 1px solid var(--border);
-    padding: 24px;
-    display: flex;
-    flex-direction: column;
-    gap: 20px;
+    min-width: 320px;       /* Minimum room for labels */
+    width: fit-content;     /* Expands based on the widest filter row */
+    max-width: 450px;       /* Prevents it from taking over the screen */
+    height: 100vh;
     overflow-y: auto;
-    z-index: 10;
+    padding: 20px;
+    background: #222;
+    color: white;
+    box-shadow: 2px 0 10px rgba(0,0,0,0.5); /* Adds depth over the map */
+    z-index: 10;            /* Ensures it stays on top */
+    transition: margin-left 0.3s ease;
+}  
+
+#map {
+    flex-grow: 1; /* Map takes up all available space */
+    height: 100vh;
 }
 
-#map { flex-grow: 1; }
+/* Style the toggle button */
+.sidebar-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    gap: 30px; /* Adjust this value to your liking */
+}
+
+#toggle-btn {
+    background: #1abc9c;
+    border: none;
+    color: white;
+    padding: 5px 10px;
+    cursor: pointer;
+    border-radius: 4px;
+}
 
 .map-title { font-size: 1.25rem; font-weight: 700; margin: 0; color: var(--accent); }
 .subheading { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-dim); margin-bottom: 12px; }
@@ -66,6 +95,23 @@ button:hover { background: #3a3a3a; cursor: pointer; border-color: var(--accent)
 /* Advanced Builder Rows */
 .filter-row { display: flex; gap: 5px; margin-bottom: 10px; }
 .filter-row select, .filter-row input { flex: 1; font-size: 0.7rem; padding: 5px; }
+
+.filter-row {
+    display: grid;
+    grid-template-columns: 1fr 0.8fr 1fr auto;
+    gap: 5px;
+    margin-bottom: 10px;
+    align-items: center;
+}
+
+.filter-row select, .filter-row input {
+    background: #444;
+    color: white;
+    border: 1px solid #555;
+    padding: 4px;
+    border-radius: 4px;
+    font-size: 12px;
+}
 
 .maplibregl-popup {
     max-width: 300px !important; /* Forces the width */
