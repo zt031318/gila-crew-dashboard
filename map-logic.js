@@ -88,14 +88,111 @@ map.on('load', () => {
 
     updateMapStyle('org_type');
 
-    fetch('./crew_data.geojson')
-        .then(res => res.json())
-        .then(data => {
-            masterGeoJSON = data;
+    // Replace the old fetch with this:
+    const sheetURL = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vR5KbZQNxRuYVNEyOkg51-BZgGWlTxi6zWio-zMNJB7mtROsu7aXUVSrJ64k5lPky0IPgcCvm6RmrWc/pub?gid=896218785&single=true&output=csv';
+
+    fetch(sheetURL)
+        .then(res => res.text())
+        .then(csvText => {
+            masterGeoJSON = csvToGeoJSON(csvText);
             generateWorkTypeCheckboxes();
-            applyFilters(); // This will also trigger the initial calendar render
+            applyFilters(); 
         });
+
+
 });
+
+function csvToGeoJSON(csv) {
+    const lines = csv.split(/\r?\n/).filter(line => line.trim() !== '');
+    const headers = lines[0].split(',').map(h => h.trim());
+    
+    const features = lines.slice(1).map((line, index) => {
+        const values = line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/);
+        const props = {};
+        
+        headers.forEach((header, i) => {
+            let val = (values[i] !== undefined && values[i] !== null) ? values[i].trim() : '';
+            val = val.replace(/^"|"$/g, '');
+
+            if (header.includes('date')) {
+                val = formatToISO(val);
+            }
+
+            // FORCE NUMERIC TYPES HERE
+            if (header === 'fid' || header === 'crew_size' || header === 'lat' || header === 'lng') {
+                val = parseFloat(val); // Use parseFloat for everything numeric
+            }
+            
+            props[header] = val;
+        });
+
+        // 4. Geometry Check - Ensure we pass actual numbers to the array
+        const lon = props.lng;
+        const lat = props.lat;
+
+        // If parseFloat failed, it returns NaN. Let's catch that.
+        if (isNaN(lon) || isNaN(lat)) {
+            console.error(`Row ${index + 2}: Geometry fail! Lng: ${props.lng}, Lat: ${props.lat}`);
+            return null; // Skip this feature so it doesn't break the map
+        }
+
+        return {
+            "type": "Feature",
+            "properties": props,
+            "geometry": {
+                "type": "Point",
+                "coordinates": [lon, lat] // These are now guaranteed numbers
+            }
+        };
+    }).filter(f => f !== null); // Remove any failed rows
+
+    return { "type": "FeatureCollection", "features": features };
+}
+
+// Helper to convert Excel numbers or MM/DD/YYYY to YYYY-MM-DD
+function formatToISO(val) {
+    if (!val) return "";
+    
+    // If it's a raw Excel number (e.g., 45417)
+    if (!isNaN(val) && val.length > 4) {
+        const date = new Date(Math.round((val - 25569) * 86400 * 1000));
+        return date.toISOString().split('T')[0];
+    }
+    
+    // If it's a slash date (e.g., 5/6/2026)
+    if (val.includes('/')) {
+        const date = new Date(val);
+        return isNaN(date) ? val : date.toISOString().split('T')[0];
+    }
+    
+    return val; // Hopefully already YYYY-MM-DD
+}
+
+function debugData() {
+    if (!masterGeoJSON || !masterGeoJSON.features.length) {
+        console.error("DEBUG: No data loaded in masterGeoJSON yet.");
+        return;
+    }
+    
+    console.log("--- DATA SANITY CHECK ---");
+    console.log("Total Features:", masterGeoJSON.features.length);
+    
+    // Check the first feature's properties
+    const sample = masterGeoJSON.features[0].properties;
+    console.table(sample); 
+    
+    // Check for common date failures
+    const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+    if (!dateRegex.test(sample.start_date)) {
+        console.warn(`⚠️ DATE FORMAT ERROR: Expected YYYY-MM-DD but got "${sample.start_date}"`);
+    }
+
+    // Check for coordinate failures
+    const coords = masterGeoJSON.features[0].geometry.coordinates;
+    if (isNaN(coords[0]) || isNaN(coords[1])) {
+        console.error("⚠️ GEOMETRY ERROR: Longitude or Latitude is not a valid number.");
+    }
+}
 
 function applyFilters() {
     if (!masterGeoJSON) return;
