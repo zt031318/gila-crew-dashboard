@@ -43,10 +43,10 @@ const map = new maplibregl.Map({
 
 map.on('load', () => {
     //geojson source
-    map.addSource('gila-trails-source'), {
-        type: 'geojson',
-        data: 'gila-trails.geojson'
-    }
+    map.addSource('gila-trails-source', {
+        'type': 'geojson',
+        'data': 'gila-trails.geojson'
+    });
 
     map.addLayer({
         id: 'trail-lines',
@@ -56,7 +56,7 @@ map.on('load', () => {
             'line-color': '#2ecc71',
             'line-width': 2,
         }
-    })
+    });
 
     map.addSource('crew-data-source', {
         'type': 'geojson',
