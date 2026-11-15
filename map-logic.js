@@ -42,6 +42,22 @@ const map = new maplibregl.Map({
 });
 
 map.on('load', () => {
+    //geojson source
+    map.addSource('gila-trails-source'), {
+        type: 'geojson',
+        data: 'gila-trails.geojson'
+    }
+
+    map.addLayer({
+        id: 'trail-lines',
+        type: 'line',
+        source: 'gila-trails-source',
+        paint: {
+            'line-color': '#2ecc71',
+            'line-width': 2,
+        }
+    })
+
     map.addSource('crew-data-source', {
         'type': 'geojson',
         'data': { "type": "FeatureCollection", "features": [] },
